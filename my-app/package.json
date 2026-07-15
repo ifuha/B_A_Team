@@ -20,6 +20,7 @@
     "@types/node": "^26",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "daisyui": "^5.6.18",
     "drizzle-kit": "^1.0.0-rc.4",
     "eslint": "^9",
     "eslint-config-next": "^16.2.10",
