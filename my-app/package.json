@@ -8,6 +8,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "csv-parse": "^7.0.1",
+    "csv-stringify": "^6.8.1",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^1.0.0-rc.4",
     "hono": "^4.12.30",

@@ -1,16 +1,22 @@
-import { drizzle } from "drizzle-orm/mysql2";
-import mysql from "mysql2/promise";
-import { relations } from "./db/relations";
+import { Hono } from "hono";
+import auth from "@/src/routes/auth";
+import masters from "@/src/routes/masters";
+import relations from "@/src/routes/relations";
+import weights from "@/src/routes/weights";
+import grades from "@/src/routes/grades";
+import years from "@/src/routes/years";
+import reports from "@/src/routes/reports";
+import csvRoutes from "@/src/routes/csv";
 
-// コネクションプールを作成(単発接続だと同時接続30人程度の要件に対して非効率なため)
-const poolConnection = mysql.createPool({
-  uri: process.env.DATABASE_URL!,
-  connectionLimit: 10,
-});
+const app = new Hono().basePath("/api");
 
-export const db = drizzle({
-  client: poolConnection,
-  relations,
-});
+app.route("/auth", auth);
+app.route("/masters", masters);
+app.route("/relations", relations);
+app.route("/weights", weights);
+app.route("/grades", grades);
+app.route("/years", years);
+app.route("/reports", reports);
+app.route("/csv", csvRoutes);
 
-export type DB = typeof db;
+export default app;
