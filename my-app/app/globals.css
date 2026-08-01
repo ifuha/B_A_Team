@@ -12,6 +12,8 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --color-primary: #1F4E8C;
+  --color-button: #436A9E;
 }
 
 @media (prefers-color-scheme: dark) {
