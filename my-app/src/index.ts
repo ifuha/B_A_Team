@@ -1,4 +1,7 @@
+// src/index.ts
 import { Hono } from "hono";
+import { swaggerUI } from "@hono/swagger-ui";
+import { openApiDoc } from "@/src/openApi";
 import auth from "@/src/routes/auth";
 import masters from "@/src/routes/masters";
 import relations from "@/src/routes/relations";
@@ -18,5 +21,8 @@ app.route("/grades", grades);
 app.route("/years", years);
 app.route("/reports", reports);
 app.route("/csv", csvRoutes);
+
+app.get("/openapi.json", (c) => c.json(openApiDoc));
+app.get("/docs", swaggerUI({ url: "/api/openapi.json" }));
 
 export default app;
