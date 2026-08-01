@@ -1,3 +1,4 @@
+// src/index.ts
 import { Hono } from "hono";
 import { swaggerUI } from "@hono/swagger-ui";
 import { openApiDoc } from "@/src/openApi";

@@ -8,8 +8,12 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@hono/swagger-ui": "^0.6.1",
+    "bcryptjs": "^3.0.3",
+    "csv-parse": "^7.0.1",
+    "csv-stringify": "^6.8.1",
     "dotenv": "^17.4.2",
-    "drizzle-orm": "^1.0.0-rc.4",
+    "drizzle-orm": "^1.0.0-rc.4-de6c356",
     "hono": "^4.12.30",
     "mysql2": "^3.23.1",
     "next": "^16.2.10",
@@ -17,7 +21,7 @@
     "react-dom": "19.2.7"
   },
   "devDependencies": {
-    "@types/node": "^26",
+    "@types/node": "^26.1.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "daisyui": "^5.6.18",
