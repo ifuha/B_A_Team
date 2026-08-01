@@ -37,20 +37,26 @@ export const major = mysqlTable("major", {
   name: varchar("name", { length: 100 }).notNull(),
 });
 
-export const fullTimeTeacher = mysqlTable("full_time_teacher", {
-  id: serial("full_time_teacher_id").primaryKey(),
-  name: varchar("name", { length: 100 }).notNull(),
-  email: varchar("email", { length: 255 }).notNull().unique(),
-  password: varchar("password", { length: 255 }).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-});
-
 export const teacher = mysqlTable("teacher", {
   id: serial("teacher_id").primaryKey(),
   name: varchar("name", { length: 100 }).notNull(),
   email: varchar("email", { length: 255 }).notNull().unique(),
   password: varchar("password", { length: 255 }).notNull(),
+  mustChangePassword: boolean("must_change_password").notNull().default(true), // 追加
+  resetToken: varchar("reset_token", { length: 255 }), // 追加
+  resetTokenExpiresAt: timestamp("reset_token_expires_at"), // 追加
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const fullTimeTeacher = mysqlTable("full_time_teacher", {
+  id: serial("full_time_teacher_id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  password: varchar("password", { length: 255 }).notNull(),
+  mustChangePassword: boolean("must_change_password").notNull().default(true), // 追加
+  resetToken: varchar("reset_token", { length: 255 }), // 追加
+  resetTokenExpiresAt: timestamp("reset_token_expires_at"), // 追加
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
@@ -83,7 +89,7 @@ export const subject = mysqlTable(
   (table) => ({
     // 同じ科目コード×年度は一意
     uniqueSubjectPerYear: unique().on(table.subjectCode, table.year),
-  })
+  }),
 );
 
 /* -------------------------------------------------------------------------- */
@@ -105,7 +111,7 @@ export const teacherSubject = mysqlTable(
   (table) => ({
     // 1科目(1年度)につき講師は1人まで
     uniqueTeacherPerSubjectYear: unique().on(table.subjectId, table.year),
-  })
+  }),
 );
 
 /* -------------------------------------------------------------------------- */
@@ -126,12 +132,8 @@ export const studentSubject = mysqlTable(
     isRetake: boolean("is_retake").notNull().default(false), // 再履修フラグ
   },
   (table) => ({
-    uniqueEnrollment: unique().on(
-      table.studentId,
-      table.subjectId,
-      table.year
-    ),
-  })
+    uniqueEnrollment: unique().on(table.studentId, table.subjectId, table.year),
+  }),
 );
 
 /* -------------------------------------------------------------------------- */
@@ -154,7 +156,7 @@ export const weight = mysqlTable(
   },
   (table) => ({
     uniqueWeightPerTerm: unique().on(table.subjectId, table.year, table.term),
-  })
+  }),
 );
 
 /* -------------------------------------------------------------------------- */
@@ -197,9 +199,9 @@ export const grade = mysqlTable(
       table.studentId,
       table.subjectId,
       table.year,
-      table.term
+      table.term,
     ),
-  })
+  }),
 );
 
 /* -------------------------------------------------------------------------- */
@@ -215,3 +217,5 @@ export const yearConfirmation = mysqlTable("year_confirmation", {
   confirmedAt: timestamp("confirmed_at").defaultNow().notNull(),
   isConfirmed: boolean("is_confirmed").notNull().default(false),
 });
+
+// src/db/schema.ts（既存の teacher, fullTimeTeacher に追記）
