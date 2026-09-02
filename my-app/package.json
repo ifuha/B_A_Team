@@ -8,6 +8,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@hono/node-server": "^2.0.12",
     "@hono/swagger-ui": "^0.6.1",
     "@tailwindcss/postcss": "^4.3.3",
     "bcryptjs": "^3.0.3",
@@ -18,6 +19,7 @@
     "hono": "^4.12.30",
     "mysql2": "^3.23.1",
     "next": "^16.2.10",
+    "pdfkit": "^0.20.2",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "tailwindcss": "^4.3.3"
@@ -25,6 +27,7 @@
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.20",
     "@types/node": "^26.1.1",
+    "@types/pdfkit": "^0.17.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "daisyui": "^5.7.9",

@@ -73,8 +73,11 @@ masters.post(
       "year",
     ]);
     const typeErrors = validateFieldTypes(rows, { year: "integer" });
-    if (errors.length > 0)
-      return c.json({ message: "取り込み失敗", errors }, 422);
+    if (errors.length > 0 || typeErrors.length > 0)
+      return c.json(
+        { message: "取り込み失敗", errors: [...errors, ...typeErrors] },
+        422,
+      );
 
     const values = rows.map((r) => ({
       subjectCode: r.subjectCode,
@@ -112,8 +115,12 @@ masters.post(
       "readingName",
       "majorId",
     ]);
-    if (errors.length > 0)
-      return c.json({ message: "取り込み失敗", errors }, 422);
+    const typeErrors = validateFieldTypes(rows, { majorId: "integer" });
+    if (errors.length > 0 || typeErrors.length > 0)
+      return c.json(
+        { message: "取り込み失敗", errors: [...errors, ...typeErrors] },
+        422,
+      );
 
     const values = rows.map((r) => ({
       studentNumber: r.studentNumber,
@@ -142,7 +149,8 @@ async function importStaffCsv(
   const rows = parseCsv(csv);
   const errors = validateRequiredFields(rows, ["name", "email", "password"]);
   const typeErrors = validateFieldTypes(rows, { email: "email" });
-  if (errors.length > 0) return { errors };
+  if (errors.length > 0 || typeErrors.length > 0)
+    return { errors: [...errors, ...typeErrors] };
 
   const values = await Promise.all(
     rows.map(async (r) => ({

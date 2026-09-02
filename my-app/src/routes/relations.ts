@@ -39,8 +39,11 @@ relations.post(
       subjectId: "integer",
       year: "integer",
     });
-    if (errors.length > 0)
-      return c.json({ message: "取り込み失敗", errors }, 422);
+    if (errors.length > 0 || typeErrors.length > 0)
+      return c.json(
+        { message: "取り込み失敗", errors: [...errors, ...typeErrors] },
+        422,
+      );
 
     const values = rows.map((r) => ({
       teacherId: Number(r.teacherId),
@@ -88,12 +91,15 @@ relations.post(
       "year",
     ]);
     const typeErrors = validateFieldTypes(rows, {
-      teacherId: "integer",
+      studentId: "integer",
       subjectId: "integer",
       year: "integer",
     });
-    if (errors.length > 0)
-      return c.json({ message: "取り込み失敗", errors }, 422);
+    if (errors.length > 0 || typeErrors.length > 0)
+      return c.json(
+        { message: "取り込み失敗", errors: [...errors, ...typeErrors] },
+        422,
+      );
 
     const values = rows.map((r) => ({
       studentId: Number(r.studentId),

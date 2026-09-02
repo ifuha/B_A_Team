@@ -2,7 +2,7 @@
 import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/src/db";
-import { yearConfirmation, grade } from "@/src/db/schema";
+import { yearConfirmation, grade, studentSubject } from "@/src/db/schema";
 import { requireAuth, type AuthEnv } from "@/src/middleware/auth";
 
 const years = new Hono<AuthEnv>();
@@ -29,16 +29,48 @@ years.post(
     const user = c.get("user");
     const { year } = await c.req.json<{ year: number }>();
 
-    const incomplete = await db
+    // 既存の成績レコードのうち未入力のもの
+    const incompleteGrades = await db
       .select()
       .from(grade)
       .where(and(eq(grade.year, year), eq(grade.isIncomplete, true)));
 
-    if (incomplete.length > 0) {
+    // 履修登録はあるが、成績レコード自体が一度も作られていない(学期, 生徒, 科目)の組も未入力扱いにする
+    const enrollments = await db
+      .select({
+        studentId: studentSubject.studentId,
+        subjectId: studentSubject.subjectId,
+      })
+      .from(studentSubject)
+      .where(eq(studentSubject.year, year));
+
+    const existingGrades = await db
+      .select({
+        studentId: grade.studentId,
+        subjectId: grade.subjectId,
+        term: grade.term,
+      })
+      .from(grade)
+      .where(eq(grade.year, year));
+    const existingKeys = new Set(
+      existingGrades.map((g) => `${g.studentId}:${g.subjectId}:${g.term}`),
+    );
+
+    let missingCount = 0;
+    for (const e of enrollments) {
+      for (const term of [1, 2]) {
+        if (!existingKeys.has(`${e.studentId}:${e.subjectId}:${term}`)) {
+          missingCount++;
+        }
+      }
+    }
+
+    const incompleteCount = incompleteGrades.length + missingCount;
+    if (incompleteCount > 0) {
       return c.json(
         {
           message: "未入力の成績があるため確定できません",
-          incompleteCount: incomplete.length,
+          incompleteCount,
         },
         400,
       );

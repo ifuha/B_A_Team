@@ -624,6 +624,20 @@ export const openApiDoc = {
       },
     },
 
+    "/reports/overview": {
+      get: {
+        tags: ["reports"],
+        summary: "専任職員ホーム画面: 生徒×科目の成績一覧（専任職員のみ）",
+        parameters: [
+          { name: "year", in: "query", schema: { type: "integer" } },
+          { name: "term", in: "query", schema: { type: "integer" } },
+          { name: "search", in: "query", schema: { type: "string" } },
+          { name: "incomplete", in: "query", schema: { type: "boolean" } },
+          { name: "fail", in: "query", schema: { type: "boolean" } },
+        ],
+        responses: { "200": { description: "OK" } },
+      },
+    },
     "/reports/subject/{subjectId}": {
       get: {
         tags: ["reports"],
