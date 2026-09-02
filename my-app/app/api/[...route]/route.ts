@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { handle } from "hono/vercel";
 import { swaggerUI } from "@hono/swagger-ui";
 import { openApiDoc } from "@/src/openApi";
 import auth from "@/src/routes/auth";
@@ -24,4 +25,8 @@ app.route("/csv", csvRoutes);
 app.get("/openapi.json", (c) => c.json(openApiDoc));
 app.get("/docs", swaggerUI({ url: "/api/openapi.json" }));
 
-export default app;
+export const GET = handle(app);
+export const POST = handle(app);
+export const PUT = handle(app);
+export const PATCH = handle(app);
+export const DELETE = handle(app);

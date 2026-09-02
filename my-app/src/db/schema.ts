@@ -3,6 +3,7 @@ import {
   mysqlEnum,
   serial,
   int,
+  bigint,
   varchar,
   boolean,
   timestamp,
@@ -69,7 +70,7 @@ export const student = mysqlTable("student", {
   status: mysqlEnum("student_status", studentStatusValues)
     .notNull()
     .default("enrolled"),
-  majorId: int("major_id")
+  majorId: bigint("major_id", { mode: "number", unsigned: true })
     .notNull()
     .references(() => major.id),
 });
@@ -100,10 +101,10 @@ export const teacherSubject = mysqlTable(
   "teacher_subject",
   {
     id: serial("teacher_subject_id").primaryKey(),
-    teacherId: int("teacher_id")
+    teacherId: bigint("teacher_id", { mode: "number", unsigned: true })
       .notNull()
       .references(() => teacher.id),
-    subjectId: int("subject_id")
+    subjectId: bigint("subject_id", { mode: "number", unsigned: true })
       .notNull()
       .references(() => subject.id),
     year: int("year").notNull(),
@@ -122,10 +123,10 @@ export const studentSubject = mysqlTable(
   "student_subject",
   {
     id: serial("student_subject_id").primaryKey(),
-    studentId: int("student_id")
+    studentId: bigint("student_id", { mode: "number", unsigned: true })
       .notNull()
       .references(() => student.id),
-    subjectId: int("subject_id")
+    subjectId: bigint("subject_id", { mode: "number", unsigned: true })
       .notNull()
       .references(() => subject.id),
     year: int("year").notNull(),
@@ -144,7 +145,7 @@ export const weight = mysqlTable(
   "weight",
   {
     id: serial("weight_id").primaryKey(),
-    subjectId: int("subject_id")
+    subjectId: bigint("subject_id", { mode: "number", unsigned: true })
       .notNull()
       .references(() => subject.id),
     year: int("year").notNull(),
@@ -167,10 +168,10 @@ export const grade = mysqlTable(
   "grade",
   {
     id: serial("grade_id").primaryKey(),
-    studentId: int("student_id")
+    studentId: bigint("student_id", { mode: "number", unsigned: true })
       .notNull()
       .references(() => student.id),
-    subjectId: int("subject_id")
+    subjectId: bigint("subject_id", { mode: "number", unsigned: true })
       .notNull()
       .references(() => subject.id),
     year: int("year").notNull(),
@@ -211,7 +212,7 @@ export const grade = mysqlTable(
 export const yearConfirmation = mysqlTable("year_confirmation", {
   id: serial("year_confirmation_id").primaryKey(),
   year: int("year").notNull().unique(),
-  confirmedBy: int("confirmed_by")
+  confirmedBy: bigint("confirmed_by", { mode: "number", unsigned: true })
     .notNull()
     .references(() => fullTimeTeacher.id),
   confirmedAt: timestamp("confirmed_at").defaultNow().notNull(),

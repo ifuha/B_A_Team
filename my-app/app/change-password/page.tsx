@@ -2,18 +2,12 @@
 import { useState, type SubmitEvent } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/src/components/AppHeader";
-import { postJson } from "@/src/lib/api-client";
+import { getJson, postJson } from "@/src/lib/api-client";
 
-type LoginResponse = {
-  id: number;
-  role: "teacher" | "full_time_teacher";
-  mustChangePassword: boolean;
-};
-
-export default function Login() {
+export default function ChangePassword() {
   const router = useRouter();
-  const [loginId, setLoginId] = useState("");
-  const [password, setPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -22,9 +16,9 @@ export default function Login() {
     setError(null);
     setSubmitting(true);
 
-    const result = await postJson<LoginResponse>("/auth/login", {
-      email: loginId,
-      password,
+    const result = await postJson<{ message: string }>("/auth/change-password", {
+      currentPassword,
+      newPassword,
     });
 
     setSubmitting(false);
@@ -34,11 +28,12 @@ export default function Login() {
       return;
     }
 
-    if (result.data.mustChangePassword) {
-      router.push("/change-password");
-    } else {
-      router.push(result.data.role === "full_time_teacher" ? "/staff" : "/teacher");
-    }
+    const me = await getJson<{ role: "teacher" | "full_time_teacher" }>(
+      "/auth/me",
+    );
+    router.push(
+      me.ok && me.data.role === "full_time_teacher" ? "/staff" : "/teacher",
+    );
   }
 
   return (
@@ -47,37 +42,46 @@ export default function Login() {
 
       <main className="flex flex-1 items-center justify-center">
         <div className="w-full max-w-md px-6">
-          <h1 className="mb-8 text-center text-3xl font-bold text-gray-900">
-            ログイン
+          <h1 className="mb-2 text-center text-3xl font-bold text-gray-900">
+            パスワード変更
           </h1>
+          <p className="mb-8 text-center text-sm text-gray-600">
+            初回ログインのため、パスワードの再設定が必要です
+          </p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="flex items-center gap-4">
-              <label htmlFor="loginId" className="w-24 shrink-0 text-sm text-gray-800">
-                ログインID
+              <label
+                htmlFor="currentPassword"
+                className="w-32 shrink-0 text-sm text-gray-800"
+              >
+                現在のパスワード
               </label>
               <input
-                id="loginId"
-                type="email"
-                autoComplete="username"
+                id="currentPassword"
+                type="password"
+                autoComplete="current-password"
                 required
-                value={loginId}
-                onChange={(e) => setLoginId(e.target.value)}
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
                 className="h-9 flex-1 rounded-sm border border-gray-400 bg-gray-200 px-3 text-sm focus:border-[#2E4374] focus:bg-white focus:outline-none"
               />
             </div>
 
             <div className="flex items-center gap-4">
-              <label htmlFor="password" className="w-24 shrink-0 text-sm text-gray-800">
-                パスワード
+              <label
+                htmlFor="newPassword"
+                className="w-32 shrink-0 text-sm text-gray-800"
+              >
+                新しいパスワード
               </label>
               <input
-                id="password"
+                id="newPassword"
                 type="password"
-                autoComplete="current-password"
+                autoComplete="new-password"
                 required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
                 className="h-9 flex-1 rounded-sm border border-gray-400 bg-gray-200 px-3 text-sm focus:border-[#2E4374] focus:bg-white focus:outline-none"
               />
             </div>
@@ -94,17 +98,8 @@ export default function Login() {
                 disabled={submitting}
                 className="rounded-sm bg-[#4C6B9A] px-10 py-2 text-sm font-medium text-white transition hover:bg-[#3f5a85] disabled:opacity-60"
               >
-                {submitting ? "ログイン中..." : "ログイン"}
+                {submitting ? "変更中..." : "パスワードを変更"}
               </button>
-            </div>
-
-            <div className="text-center">
-              <a
-                href="/forgot-password"
-                className="text-sm text-blue-600 underline hover:text-blue-800"
-              >
-                パスワードをお忘れの場合
-              </a>
             </div>
           </form>
         </div>

@@ -1,6 +1,6 @@
 // src/routes/grades.ts
 import { Hono } from "hono";
-import { and, eq, gte } from "drizzle-orm";
+import { and, eq, gte, inArray, or } from "drizzle-orm";
 import { db } from "@/src/db";
 import { grade, teacherSubject, subject, weight } from "@/src/db/schema";
 import { isYearConfirmed } from "@/src/lib/year-guard";
@@ -8,6 +8,10 @@ import {
   calculateFinalScore,
   calculateFinalRank,
 } from "@/src/lib/grade-calculator";
+import {
+  getOwnedYearsForSubject,
+  getOwnedSubjectYearPairs,
+} from "@/src/lib/authorization";
 import { requireAuth, type AuthEnv } from "@/src/middleware/auth";
 
 const grades = new Hono<AuthEnv>();
@@ -50,8 +54,30 @@ grades.get("/", requireAuth(), async (c) => {
   return c.json(rows);
 });
 
+/* GET /grades/subject/:subjectId （6.7: 教員は担当外の科目は見れない） */
 grades.get("/subject/:subjectId", requireAuth(), async (c) => {
+  const user = c.get("user");
   const subjectId = Number(c.req.param("subjectId"));
+
+  if (user.role === "teacher") {
+    const ownedYears = await getOwnedYearsForSubject(user.id, subjectId);
+    if (ownedYears.length === 0) {
+      return c.json({ message: "担当外の科目です" }, 403);
+    }
+
+    const cutoffYear = new Date().getFullYear() - 3;
+    const visibleYears = ownedYears.filter((y) => y >= cutoffYear);
+    if (visibleYears.length === 0) return c.json([]);
+
+    const rows = await db
+      .select()
+      .from(grade)
+      .where(
+        and(eq(grade.subjectId, subjectId), inArray(grade.year, visibleYears)),
+      );
+    return c.json(rows);
+  }
+
   const rows = await db
     .select()
     .from(grade)
@@ -59,20 +85,36 @@ grades.get("/subject/:subjectId", requireAuth(), async (c) => {
   return c.json(rows);
 });
 
+/* GET /grades/student/:studentId （講師=担当科目×過去3年分のみ、専任職員=全件 6.7/4.13） */
 grades.get("/student/:studentId", requireAuth(), async (c) => {
   const user = c.get("user");
   const studentId = Number(c.req.param("studentId"));
 
-  const conditions = [eq(grade.studentId, studentId)];
   if (user.role === "teacher") {
+    const pairs = await getOwnedSubjectYearPairs(user.id);
+    if (pairs.length === 0) return c.json([]);
+
     const cutoffYear = new Date().getFullYear() - 3;
-    conditions.push(gte(grade.year, cutoffYear));
+    const ownershipCondition = or(
+      ...pairs
+        .filter((p) => p.year >= cutoffYear)
+        .map((p) =>
+          and(eq(grade.subjectId, p.subjectId), eq(grade.year, p.year)),
+        ),
+    );
+    if (!ownershipCondition) return c.json([]);
+
+    const rows = await db
+      .select()
+      .from(grade)
+      .where(and(eq(grade.studentId, studentId), ownershipCondition));
+    return c.json(rows);
   }
 
   const rows = await db
     .select()
     .from(grade)
-    .where(and(...conditions));
+    .where(eq(grade.studentId, studentId));
   return c.json(rows);
 });
 
