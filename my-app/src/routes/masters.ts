@@ -14,6 +14,7 @@ import { hashPassword } from "@/src/lib/password";
 import {
   parseCsv,
   validateRequiredFields,
+  resolveNamesToIds,
   type CsvRowError,
 } from "@/src/lib/csv";
 import { requireAuth, type AuthEnv } from "@/src/middleware/auth";
@@ -113,35 +114,13 @@ masters.post(
 
     const year = new Date().getFullYear();
 
-    const teacherNames = [...new Set(rows.map((r) => r["担当講師"]))];
-    const teacherRows = await db
-      .select({ id: teacher.id, name: teacher.name })
-      .from(teacher)
-      .where(inArray(teacher.name, teacherNames));
-
-    const teacherIdsByName = new Map<string, number[]>();
-    for (const t of teacherRows) {
-      if (!teacherIdsByName.has(t.name)) teacherIdsByName.set(t.name, []);
-      teacherIdsByName.get(t.name)!.push(t.id);
-    }
-
-    const teacherErrors: CsvRowError[] = [];
-    rows.forEach((r, i) => {
-      const matches = teacherIdsByName.get(r["担当講師"]) ?? [];
-      if (matches.length === 0) {
-        teacherErrors.push({
-          row: i + 1,
-          field: "担当講師",
-          message: "該当する講師が見つかりません",
-        });
-      } else if (matches.length > 1) {
-        teacherErrors.push({
-          row: i + 1,
-          field: "担当講師",
-          message: "同姓同名の講師が複数存在するため特定できません",
-        });
-      }
-    });
+    const { idsByName: teacherIdsByName, errors: teacherErrors } =
+      await resolveNamesToIds(rows, "担当講師", (names) =>
+        db
+          .select({ id: teacher.id, name: teacher.name })
+          .from(teacher)
+          .where(inArray(teacher.name, names)),
+      );
     if (teacherErrors.length > 0) {
       return c.json({ message: "取り込み失敗", errors: teacherErrors }, 422);
     }
@@ -194,11 +173,10 @@ masters.post(
       "studentNumber",
       "name",
       "readingName",
-      "majorId",
+      "専攻",
       "enrollmentYear",
     ]);
     const typeErrors = validateFieldTypes(rows, {
-      majorId: "integer",
       enrollmentYear: "integer",
     });
     if (errors.length > 0 || typeErrors.length > 0)
@@ -207,11 +185,21 @@ masters.post(
         422,
       );
 
+    const { idsByName: majorIdsByName, errors: majorErrors } =
+      await resolveNamesToIds(rows, "専攻", (names) =>
+        db
+          .select({ id: major.id, name: major.name })
+          .from(major)
+          .where(inArray(major.name, names)),
+      );
+    if (majorErrors.length > 0)
+      return c.json({ message: "取り込み失敗", errors: majorErrors }, 422);
+
     const values = rows.map((r) => ({
       studentNumber: r.studentNumber,
       name: r.name,
       readingName: r.readingName,
-      majorId: Number(r.majorId),
+      majorId: majorIdsByName.get(r["専攻"])![0],
       enrollmentYear: Number(r.enrollmentYear),
       status:
         (r.status as (typeof student.$inferInsert)["status"]) || "enrolled",
