@@ -208,6 +208,28 @@ export const openApiDoc = {
         },
       },
     },
+    "/masters/subjects/import-with-teacher": {
+      post: {
+        tags: ["masters"],
+        summary:
+          "科目・講師名CSV一括取り込み（専攻,科目名,担当講師 形式。科目作成と講師紐づけを一括実行、専任職員のみ）",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: { csv: { type: "string" } },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "OK" },
+          "422": { description: "バリデーションエラー" },
+        },
+      },
+    },
     "/masters/students": {
       get: {
         tags: ["masters"],

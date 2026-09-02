@@ -52,8 +52,13 @@ const ENTITIES: EntityConfig[] = [
     exportPath: "/csv/export/full-time-teachers",
   },
   {
+    key: "subjects-with-teacher",
+    label: "科目・講師紐づけ(科目名+担当講師名)",
+    importPath: "/masters/subjects/import-with-teacher",
+  },
+  {
     key: "teacher-subject",
-    label: "講師・科目紐づけ",
+    label: "講師・科目紐づけ(ID指定)",
     importPath: "/relations/teacher-subject/import",
   },
   {
