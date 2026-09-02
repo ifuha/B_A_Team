@@ -73,6 +73,7 @@ export const student = mysqlTable("student", {
   majorId: bigint("major_id", { mode: "number", unsigned: true })
     .notNull()
     .references(() => major.id),
+  enrollmentYear: int("enrollment_year").notNull(), // 入学年度(学年/年次の算出に使用)
 });
 
 /* -------------------------------------------------------------------------- */

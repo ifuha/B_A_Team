@@ -7,9 +7,11 @@ import {
   getOwnedYearsForSubject,
   getOwnedSubjectYearPairs,
 } from "@/src/lib/authorization";
+import { computeGradeLevel } from "@/src/lib/grade-level";
 import {
   generateSubjectReportPdf,
   generateStudentReportPdf,
+  generateAllStudentsReportPdf,
 } from "@/src/lib/pdf-report";
 import { requireAuth, type AuthEnv } from "@/src/middleware/auth";
 
@@ -226,24 +228,27 @@ reports.get("/subject/:subjectId/pdf", requireAuth(), async (c) => {
   return respondWithPdf(c, pdf, `subject_${subjectId}_report.pdf`);
 });
 
-/* GET /reports/student/:studentId/pdf （4.4/4.11 個人別成績表PDF、6.7: 教員は担当外の科目は見れない） */
-reports.get("/student/:studentId/pdf", requireAuth(), async (c) => {
-  const user = c.get("user");
-  const studentId = Number(c.req.param("studentId"));
-  const from = c.req.query("from"); // year
-  const to = c.req.query("to");
+type AuthUser = { id: number; role: "teacher" | "full_time_teacher" };
 
+/* 個人別成績表(4.11)の元データ取得。PDF出力とプレビュー画面(/detail)で共用 */
+async function getStudentReportData(
+  user: AuthUser,
+  studentId: number,
+  from?: string,
+  to?: string,
+) {
   const [studentRow] = await db
     .select({
       name: student.name,
       studentNumber: student.studentNumber,
       status: student.status,
       majorName: major.name,
+      enrollmentYear: student.enrollmentYear,
     })
     .from(student)
     .innerJoin(major, eq(student.majorId, major.id))
     .where(eq(student.id, studentId));
-  if (!studentRow) return c.json({ message: "生徒が見つかりません" }, 404);
+  if (!studentRow) return null;
 
   const conditions = [eq(grade.studentId, studentId)];
   if (from) conditions.push(gte(grade.year, Number(from)));
@@ -259,10 +264,7 @@ reports.get("/student/:studentId/pdf", requireAuth(), async (c) => {
           and(eq(grade.subjectId, p.subjectId), eq(grade.year, p.year)),
         ),
     );
-    if (!ownershipCondition) {
-      const pdf = await generateStudentReportPdf(studentRow, [], false);
-      return respondWithPdf(c, pdf, `student_${studentId}_report.pdf`);
-    }
+    if (!ownershipCondition) return { studentRow, rows: [] };
     conditions.push(ownershipCondition);
   }
 
@@ -280,10 +282,180 @@ reports.get("/student/:studentId/pdf", requireAuth(), async (c) => {
     .from(grade)
     .where(and(...conditions));
 
+  return { studentRow, rows };
+}
+
+/* 指定年度に履修登録がある全生徒分の個人別成績表データを一括取得(N+1回避のためgradeは1クエリでまとめて取得) */
+async function getAllStudentsReportData(user: AuthUser, year: number) {
+  const studentRows = await db
+    .selectDistinct({
+      id: student.id,
+      name: student.name,
+      studentNumber: student.studentNumber,
+      status: student.status,
+      majorName: major.name,
+      enrollmentYear: student.enrollmentYear,
+    })
+    .from(student)
+    .innerJoin(major, eq(student.majorId, major.id))
+    .innerJoin(studentSubject, eq(studentSubject.studentId, student.id))
+    .where(eq(studentSubject.year, year))
+    .orderBy(student.id);
+
+  if (studentRows.length === 0) return [];
+
+  const studentIds = studentRows.map((s) => s.id);
+  const conditions = [inArray(grade.studentId, studentIds)];
+
+  if (user.role === "teacher") {
+    const pairs = await getOwnedSubjectYearPairs(user.id);
+    const cutoffYear = new Date().getFullYear() - 3;
+    const ownershipCondition = or(
+      ...pairs
+        .filter((p) => p.year >= cutoffYear)
+        .map((p) =>
+          and(eq(grade.subjectId, p.subjectId), eq(grade.year, p.year)),
+        ),
+    );
+    if (!ownershipCondition) {
+      return studentRows.map((s) => ({ studentRow: s, gradeYears: {} }));
+    }
+    conditions.push(ownershipCondition);
+  }
+
+  const gradeRows = await db
+    .select({
+      studentId: grade.studentId,
+      subjectName: grade.subjectNameSnapshot,
+      year: grade.year,
+      term: grade.term,
+      attendanceRate: grade.attendanceRate,
+      attitudeClass: grade.attitudeClass,
+      homeworkEvaluation: grade.homeworkEvaluation,
+      finalRank: grade.finalRank,
+      isIncomplete: grade.isIncomplete,
+    })
+    .from(grade)
+    .where(and(...conditions));
+
+  const rowsByStudent = new Map<number, typeof gradeRows>();
+  for (const row of gradeRows) {
+    if (!rowsByStudent.has(row.studentId)) rowsByStudent.set(row.studentId, []);
+    rowsByStudent.get(row.studentId)!.push(row);
+  }
+
+  return studentRows.map((s) => {
+    const gradeYears: Record<number, typeof gradeRows> = {};
+    for (const row of rowsByStudent.get(s.id) ?? []) {
+      const level = computeGradeLevel(s.enrollmentYear, row.year);
+      if (!gradeYears[level]) gradeYears[level] = [];
+      gradeYears[level].push(row);
+    }
+    return { studentRow: s, gradeYears };
+  });
+}
+
+/* GET /reports/students/detail （全生徒分の個人別成績表プレビュー用JSON） */
+reports.get("/students/detail", requireAuth(), async (c) => {
+  const user = c.get("user");
+  const year = Number(c.req.query("year")) || new Date().getFullYear();
+
+  const data = await getAllStudentsReportData(user, year);
+
+  return c.json({
+    students: data.map(({ studentRow, gradeYears }) => ({
+      student: {
+        id: studentRow.id,
+        name: studentRow.name,
+        studentNumber: studentRow.studentNumber,
+        majorName: studentRow.majorName,
+        gradeLevel: computeGradeLevel(studentRow.enrollmentYear),
+      },
+      gradeYears,
+    })),
+  });
+});
+
+/* GET /reports/students/pdf （全生徒分の個人別成績表PDF、1名1ページ） */
+reports.get("/students/pdf", requireAuth(), async (c) => {
+  const user = c.get("user");
+  const year = Number(c.req.query("year")) || new Date().getFullYear();
+
+  const data = await getAllStudentsReportData(user, year);
+
+  const pdf = await generateAllStudentsReportPdf(
+    data.map(({ studentRow, gradeYears }) => ({
+      student: {
+        name: studentRow.name,
+        studentNumber: studentRow.studentNumber,
+        majorName: studentRow.majorName,
+        status: studentRow.status,
+        gradeLevel: computeGradeLevel(studentRow.enrollmentYear),
+      },
+      gradeYears,
+    })),
+    user.role === "full_time_teacher",
+  );
+  return respondWithPdf(c, pdf, `students_${year}_report.pdf`);
+});
+
+/* GET /reports/student/:studentId/detail （4.11 個人別成績表のPDF出力プレビュー用JSON） */
+reports.get("/student/:studentId/detail", requireAuth(), async (c) => {
+  const user = c.get("user");
+  const studentId = Number(c.req.param("studentId"));
+  const from = c.req.query("from");
+  const to = c.req.query("to");
+
+  const data = await getStudentReportData(user, studentId, from, to);
+  if (!data) return c.json({ message: "生徒が見つかりません" }, 404);
+
+  const { studentRow, rows } = data;
+  const currentGradeLevel = computeGradeLevel(studentRow.enrollmentYear);
+
+  const gradeYears: Record<number, typeof rows> = {};
+  for (const row of rows) {
+    const level = computeGradeLevel(studentRow.enrollmentYear, row.year);
+    if (!gradeYears[level]) gradeYears[level] = [];
+    gradeYears[level].push(row);
+  }
+
+  return c.json({
+    student: {
+      name: studentRow.name,
+      studentNumber: studentRow.studentNumber,
+      majorName: studentRow.majorName,
+      gradeLevel: currentGradeLevel,
+    },
+    gradeYears,
+  });
+});
+
+/* GET /reports/student/:studentId/pdf （4.4/4.11 個人別成績表PDF、6.7: 教員は担当外の科目は見れない） */
+reports.get("/student/:studentId/pdf", requireAuth(), async (c) => {
+  const user = c.get("user");
+  const studentId = Number(c.req.param("studentId"));
+  const from = c.req.query("from"); // year
+  const to = c.req.query("to");
+
+  const data = await getStudentReportData(user, studentId, from, to);
+  if (!data) return c.json({ message: "生徒が見つかりません" }, 404);
+
+  const { studentRow, rows } = data;
+
+  const gradeYears: Record<number, typeof rows> = {};
+  for (const row of rows) {
+    const level = computeGradeLevel(studentRow.enrollmentYear, row.year);
+    if (!gradeYears[level]) gradeYears[level] = [];
+    gradeYears[level].push(row);
+  }
+
   // 4.11: 不可・出席率不足は専任職員向けに強調表示
   const pdf = await generateStudentReportPdf(
-    studentRow,
-    rows,
+    {
+      ...studentRow,
+      gradeLevel: computeGradeLevel(studentRow.enrollmentYear),
+    },
+    gradeYears,
     user.role === "full_time_teacher",
   );
   return respondWithPdf(c, pdf, `student_${studentId}_report.pdf`);

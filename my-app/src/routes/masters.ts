@@ -114,8 +114,12 @@ masters.post(
       "name",
       "readingName",
       "majorId",
+      "enrollmentYear",
     ]);
-    const typeErrors = validateFieldTypes(rows, { majorId: "integer" });
+    const typeErrors = validateFieldTypes(rows, {
+      majorId: "integer",
+      enrollmentYear: "integer",
+    });
     if (errors.length > 0 || typeErrors.length > 0)
       return c.json(
         { message: "取り込み失敗", errors: [...errors, ...typeErrors] },
@@ -127,6 +131,7 @@ masters.post(
       name: r.name,
       readingName: r.readingName,
       majorId: Number(r.majorId),
+      enrollmentYear: Number(r.enrollmentYear),
       status:
         (r.status as (typeof student.$inferInsert)["status"]) || "enrolled",
     }));

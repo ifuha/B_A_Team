@@ -43,7 +43,6 @@ export default function StaffHome() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [editTarget, setEditTarget] = useState<OverviewStudent[] | null>(null);
   const [confirmMessage, setConfirmMessage] = useState<string | null>(null);
-  const [pdfMenuOpen, setPdfMenuOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -247,32 +246,13 @@ export default function StaffHome() {
             選択した生徒の成績変更({selectedIds.size})
           </button>
 
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setPdfMenuOpen((v) => !v)}
-              disabled={subjects.length === 0}
-              className="rounded-sm bg-[#4C6B9A] px-4 py-1.5 text-sm text-white hover:bg-[#3f5a85] disabled:opacity-40"
-            >
-              PDF出力
-            </button>
-            {pdfMenuOpen && (
-              <div className="absolute right-0 z-10 mt-1 w-48 rounded-sm border border-gray-200 bg-white py-1 shadow-lg">
-                {subjects.map((subj) => (
-                  <a
-                    key={subj.id}
-                    href={`/api/reports/subject/${subj.id}/pdf`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => setPdfMenuOpen(false)}
-                  >
-                    {subj.name}
-                  </a>
-                ))}
-              </div>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={() => router.push(`/staff/pdf/students?year=${year}`)}
+            className="rounded-sm bg-[#4C6B9A] px-4 py-1.5 text-sm text-white hover:bg-[#3f5a85]"
+          >
+            PDF出力
+          </button>
         </div>
 
         {error && (
@@ -342,7 +322,18 @@ export default function StaffHome() {
                         変更
                       </button>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2">{s.name}</td>
+                    <td className="whitespace-nowrap px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/staff/pdf/student/${s.id}`);
+                        }}
+                        className="text-[#2E4374] underline hover:text-[#1c2c4c]"
+                      >
+                        {s.name}
+                      </button>
+                    </td>
                     <td className="whitespace-nowrap px-3 py-2">
                       {s.studentNumber}
                     </td>
