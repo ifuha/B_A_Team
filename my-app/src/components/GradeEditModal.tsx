@@ -15,6 +15,7 @@ export type OverviewStudent = {
   name: string;
   studentNumber: string;
   majorId: number;
+  gradeLevel: number;
   grades: Record<number, OverviewCell>;
 };
 

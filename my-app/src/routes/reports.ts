@@ -96,6 +96,9 @@ reports.get(
     const search = c.req.query("search")?.trim();
     const onlyIncomplete = c.req.query("incomplete") === "true";
     const onlyFail = c.req.query("fail") === "true";
+    const gradeLevel = c.req.query("gradeLevel")
+      ? Number(c.req.query("gradeLevel"))
+      : null;
 
     const subjectRows = await db
       .selectDistinct({ id: subject.id, name: subject.name })
@@ -110,6 +113,7 @@ reports.get(
         name: student.name,
         studentNumber: student.studentNumber,
         majorId: student.majorId,
+        enrollmentYear: student.enrollmentYear,
       })
       .from(student)
       .innerJoin(studentSubject, eq(studentSubject.studentId, student.id))
@@ -125,6 +129,18 @@ reports.get(
     for (const g of gradeRows) {
       gradeByKey.set(`${g.studentId}:${g.subjectId}`, g);
     }
+
+    // 「未入力」と「そもそも履修していない」を区別するため、実際の履修ペアを取得
+    const enrollmentRows = await db
+      .select({
+        studentId: studentSubject.studentId,
+        subjectId: studentSubject.subjectId,
+      })
+      .from(studentSubject)
+      .where(eq(studentSubject.year, year));
+    const enrolledKeys = new Set(
+      enrollmentRows.map((e) => `${e.studentId}:${e.subjectId}`),
+    );
 
     type Cell = {
       gradeId: number;
@@ -143,8 +159,10 @@ reports.get(
           s.studentNumber.includes(search),
       )
       .map((s) => {
+        // 履修していない科目のキーは設定しない(未履修 = 未入力ではない)
         const cells: Record<number, Cell> = {};
         for (const subj of subjectRows) {
+          if (!enrolledKeys.has(`${s.id}:${subj.id}`)) continue;
           const g = gradeByKey.get(`${s.id}:${subj.id}`);
           cells[subj.id] = g
             ? {
@@ -162,10 +180,14 @@ reports.get(
           name: s.name,
           studentNumber: s.studentNumber,
           majorId: s.majorId,
+          gradeLevel: computeGradeLevel(s.enrollmentYear, year),
           grades: cells,
         };
       });
 
+    if (gradeLevel !== null) {
+      students = students.filter((s) => s.gradeLevel === gradeLevel);
+    }
     if (onlyIncomplete) {
       students = students.filter((s) =>
         Object.values(s.grades).some((cell) => !cell || cell.isIncomplete),

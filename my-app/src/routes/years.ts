@@ -2,7 +2,7 @@
 import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/src/db";
-import { yearConfirmation, grade, studentSubject } from "@/src/db/schema";
+import { yearConfirmation, grade, studentSubject, weight } from "@/src/db/schema";
 import { requireAuth, type AuthEnv } from "@/src/middleware/auth";
 
 const years = new Hono<AuthEnv>();
@@ -56,9 +56,25 @@ years.post(
       existingGrades.map((g) => `${g.studentId}:${g.subjectId}:${g.term}`),
     );
 
+    // 科目ごとに「実際に授業が行われている学期」(重みが設定されている学期)だけを必須とする。
+    // 前期のみ開講の科目に後期分の成績まで要求してしまわないようにするため。
+    const weightRows = await db
+      .select({ subjectId: weight.subjectId, term: weight.term })
+      .from(weight)
+      .where(eq(weight.year, year));
+    const activeTermsBySubject = new Map<number, Set<number>>();
+    for (const w of weightRows) {
+      if (!activeTermsBySubject.has(w.subjectId)) {
+        activeTermsBySubject.set(w.subjectId, new Set());
+      }
+      activeTermsBySubject.get(w.subjectId)!.add(w.term);
+    }
+
     let missingCount = 0;
     for (const e of enrollments) {
-      for (const term of [1, 2]) {
+      const activeTerms = activeTermsBySubject.get(e.subjectId);
+      if (!activeTerms) continue; // まだ重みが設定されていない科目は対象外
+      for (const term of activeTerms) {
         if (!existingKeys.has(`${e.studentId}:${e.subjectId}:${term}`)) {
           missingCount++;
         }

@@ -6,8 +6,11 @@ import GradeEditModal, {
   type OverviewStudent,
   type OverviewSubject,
 } from "@/src/components/GradeEditModal";
+import YearCloseConfirmModal from "@/src/components/YearCloseConfirmModal";
 import { getJson, postJson } from "@/src/lib/api-client";
 import { FINAL_RANK_LABEL } from "@/src/lib/grade-labels";
+
+const GRADE_LEVEL_OPTIONS = [1, 2, 3, 4];
 
 type Me = {
   id: number;
@@ -32,6 +35,7 @@ export default function StaffHome() {
 
   const [year, setYear] = useState(CURRENT_YEAR);
   const [term, setTerm] = useState(1);
+  const [gradeLevel, setGradeLevel] = useState<number | "">("");
   const [search, setSearch] = useState("");
   const [onlyIncomplete, setOnlyIncomplete] = useState(false);
   const [onlyFail, setOnlyFail] = useState(false);
@@ -43,6 +47,8 @@ export default function StaffHome() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [editTarget, setEditTarget] = useState<OverviewStudent[] | null>(null);
   const [confirmMessage, setConfirmMessage] = useState<string | null>(null);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [closing, setClosing] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -66,6 +72,7 @@ export default function StaffHome() {
       year: String(year),
       term: String(term),
     });
+    if (gradeLevel !== "") params.set("gradeLevel", String(gradeLevel));
     if (search) params.set("search", search);
     if (onlyIncomplete) params.set("incomplete", "true");
     if (onlyFail) params.set("fail", "true");
@@ -80,7 +87,7 @@ export default function StaffHome() {
     }
     setData(result.data);
     setSelectedIds(new Set());
-  }, [year, term, search, onlyIncomplete, onlyFail]);
+  }, [year, term, gradeLevel, search, onlyIncomplete, onlyFail]);
 
   useEffect(() => {
     if (!me) return;
@@ -101,12 +108,15 @@ export default function StaffHome() {
     });
   }
 
-  async function handleCloseYear() {
+  async function handleConfirmCloseYear() {
+    setClosing(true);
     setConfirmMessage(null);
     const result = await postJson<{ message: string; incompleteCount?: number }>(
       "/years/close",
       { year },
     );
+    setClosing(false);
+    setShowCloseConfirm(false);
     if (result.ok) {
       setConfirmMessage(result.data.message);
       loadOverview();
@@ -150,7 +160,7 @@ export default function StaffHome() {
             </button>
             <button
               type="button"
-              onClick={handleCloseYear}
+              onClick={() => setShowCloseConfirm(true)}
               className="rounded-sm bg-white/10 px-4 py-1.5 text-sm hover:bg-white/20"
             >
               成績確定
@@ -203,6 +213,21 @@ export default function StaffHome() {
               後期
             </button>
           </div>
+
+          <select
+            value={gradeLevel}
+            onChange={(e) =>
+              setGradeLevel(e.target.value === "" ? "" : Number(e.target.value))
+            }
+            className="h-9 rounded-sm border border-gray-300 px-2 text-sm"
+          >
+            <option value="">全学年</option>
+            {GRADE_LEVEL_OPTIONS.map((g) => (
+              <option key={g} value={g}>
+                {g}年生
+              </option>
+            ))}
+          </select>
 
           <button
             type="button"
@@ -338,25 +363,30 @@ export default function StaffHome() {
                       {s.studentNumber}
                     </td>
                     {subjects.map((subj) => {
+                      const notEnrolled = !(subj.id in s.grades);
                       const cell = s.grades[subj.id];
                       const isFail = cell?.finalRank === "fail";
-                      const isIncomplete = !cell || cell.isIncomplete;
+                      const isIncomplete = !notEnrolled && (!cell || cell.isIncomplete);
                       return (
                         <td
                           key={subj.id}
                           className={`whitespace-nowrap px-3 py-2 ${
-                            isFail
-                              ? "bg-red-100 text-red-800"
-                              : isIncomplete
-                                ? "bg-yellow-50 text-yellow-800"
-                                : ""
+                            notEnrolled
+                              ? "text-gray-400"
+                              : isFail
+                                ? "bg-red-100 text-red-800"
+                                : isIncomplete
+                                  ? "bg-yellow-50 text-yellow-800"
+                                  : ""
                           }`}
                         >
-                          {cell?.finalRank
-                            ? FINAL_RANK_LABEL[cell.finalRank]
-                            : !cell || cell.isIncomplete
-                              ? "未入力"
-                              : "計算待ち"}
+                          {notEnrolled
+                            ? "未履修"
+                            : cell?.finalRank
+                              ? FINAL_RANK_LABEL[cell.finalRank]
+                              : !cell || cell.isIncomplete
+                                ? "未入力"
+                                : "計算待ち"}
                         </td>
                       );
                     })}
@@ -377,6 +407,16 @@ export default function StaffHome() {
             setEditTarget(null);
             loadOverview();
           }}
+        />
+      )}
+
+      {showCloseConfirm && (
+        <YearCloseConfirmModal
+          gradeLevelLabel={gradeLevel === "" ? "全学年" : `${gradeLevel}年生`}
+          termLabel={term === 1 ? "前期" : "後期"}
+          onCancel={() => setShowCloseConfirm(false)}
+          onConfirm={handleConfirmCloseYear}
+          confirming={closing}
         />
       )}
     </div>

@@ -278,6 +278,23 @@ grades.get(
       gradeRows.map((g) => [`${g.studentId}:${g.subjectId}`, g]),
     );
 
+    // 「未確定」と「そもそも履修していない」を区別するため、実際の履修ペアを取得
+    const enrollmentRows = await db
+      .select({
+        studentId: studentSubject.studentId,
+        subjectId: studentSubject.subjectId,
+      })
+      .from(studentSubject)
+      .where(
+        and(
+          inArray(studentSubject.subjectId, mySubjectIds),
+          eq(studentSubject.year, year),
+        ),
+      );
+    const enrolledKeys = new Set(
+      enrollmentRows.map((e) => `${e.studentId}:${e.subjectId}`),
+    );
+
     type Cell = {
       gradeId: number;
       finalRank: string | null;
@@ -287,6 +304,7 @@ grades.get(
     let students = enrolled.map((s) => {
       const cells: Record<number, Cell> = {};
       for (const subj of subjectRows) {
+        if (!enrolledKeys.has(`${s.id}:${subj.id}`)) continue;
         const g = gradeByKey.get(`${s.id}:${subj.id}`);
         cells[subj.id] = g
           ? { gradeId: g.id, finalRank: g.finalRank, isIncomplete: g.isIncomplete }

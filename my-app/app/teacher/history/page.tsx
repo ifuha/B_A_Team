@@ -234,18 +234,25 @@ export default function TeacherHistory() {
                       {s.studentNumber}
                     </td>
                     {subjects.map((subj) => {
+                      const notEnrolled = !(subj.id in s.grades);
                       const cell = s.grades[subj.id];
                       const isFail = cell?.finalRank === "fail";
                       return (
                         <td
                           key={subj.id}
                           className={`whitespace-nowrap px-3 py-2 ${
-                            isFail ? "bg-red-100 text-red-800" : ""
+                            notEnrolled
+                              ? "text-gray-400"
+                              : isFail
+                                ? "bg-red-100 text-red-800"
+                                : ""
                           }`}
                         >
-                          {cell?.finalRank
-                            ? FINAL_RANK_LABEL[cell.finalRank]
-                            : "未確定"}
+                          {notEnrolled
+                            ? "未履修"
+                            : cell?.finalRank
+                              ? FINAL_RANK_LABEL[cell.finalRank]
+                              : "未確定"}
                         </td>
                       );
                     })}
