@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type OverviewCell = {
   gradeId: number;
@@ -15,6 +15,7 @@ export type OverviewStudent = {
   name: string;
   studentNumber: string;
   majorId: number;
+  gradeLevel: number;
   grades: Record<number, OverviewCell>;
 };
 
@@ -47,7 +48,7 @@ export default function GradeEditModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [values, setValues] = useState<Record<string, EditValue>>(() => {
+  const buildInitialValues = () => {
     const initial: Record<string, EditValue> = {};
     for (const s of students) {
       for (const subj of subjects) {
@@ -61,9 +62,36 @@ export default function GradeEditModal({
       }
     }
     return initial;
-  });
+  };
+
+  const initialValuesRef = useRef(buildInitialValues());
+  const [values, setValues] = useState<Record<string, EditValue>>(
+    () => initialValuesRef.current,
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
+
+  const isDirty =
+    JSON.stringify(values) !== JSON.stringify(initialValuesRef.current);
+
+  // 未保存の変更がある状態でタブを閉じる/リロードしようとした場合の警告(4.8)
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (!isDirty) return;
+      e.preventDefault();
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty]);
+
+  function handleCancel() {
+    if (isDirty) {
+      setShowUnsavedWarning(true);
+    } else {
+      onClose();
+    }
+  }
 
   function updateValue(key: string, field: keyof EditValue, value: string) {
     setValues((prev) => ({
@@ -193,7 +221,7 @@ export default function GradeEditModal({
         <div className="mt-6 flex justify-end gap-3">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleCancel}
             className="rounded-sm border border-gray-400 px-5 py-2 text-sm text-gray-700 hover:bg-gray-100"
           >
             キャンセル
@@ -210,6 +238,44 @@ export default function GradeEditModal({
           )}
         </div>
       </div>
+
+      {showUnsavedWarning && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md overflow-hidden rounded-md bg-white shadow-lg">
+            <div className="flex items-center gap-2 border-2 border-[#2E4374] bg-[#FDF6DC] px-4 py-3 text-[#8A6D1D]">
+              <span aria-hidden>⚠</span>
+              <span className="font-semibold">変更が保存していません</span>
+            </div>
+            <div className="flex flex-col items-center gap-6 p-8">
+              <p className="text-center text-sm text-black">
+                このまま移動してしまうと、
+                <br />
+                編集した内容が元に戻ります
+              </p>
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => setShowUnsavedWarning(false)}
+                  className="rounded-sm border border-gray-400 px-5 py-2 text-sm text-black hover:bg-gray-100"
+                >
+                  変更を続ける
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setShowUnsavedWarning(false);
+                    await handleSave();
+                  }}
+                  disabled={saving}
+                  className="rounded-sm bg-[#4C6B9A] px-5 py-2 text-sm font-medium text-white hover:bg-[#3f5a85] disabled:opacity-60"
+                >
+                  保存してホームに移動
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
