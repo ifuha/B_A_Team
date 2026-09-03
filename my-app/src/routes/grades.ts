@@ -2,12 +2,21 @@
 import { Hono } from "hono";
 import { and, eq, gte, inArray, or } from "drizzle-orm";
 import { db } from "@/src/db";
-import { grade, teacherSubject, subject, weight } from "@/src/db/schema";
+import {
+  grade,
+  teacherSubject,
+  subject,
+  weight,
+  student,
+  major,
+  studentSubject,
+} from "@/src/db/schema";
 import { isYearConfirmed } from "@/src/lib/year-guard";
 import {
   calculateFinalScore,
   calculateFinalRank,
 } from "@/src/lib/grade-calculator";
+import { computeGradeLevel } from "@/src/lib/grade-level";
 import {
   getOwnedYearsForSubject,
   getOwnedSubjectYearPairs,
@@ -117,6 +126,198 @@ grades.get("/student/:studentId", requireAuth(), async (c) => {
     .where(eq(grade.studentId, studentId));
   return c.json(rows);
 });
+
+/* GET /grades/entry-sheet: 講師ホーム画面用、担当科目1つ分の履修生徒×成績入力シート */
+grades.get(
+  "/entry-sheet",
+  requireAuth({ allowedRoles: ["teacher"] }),
+  async (c) => {
+    const user = c.get("user");
+    const subjectId = Number(c.req.query("subjectId"));
+    const year = Number(c.req.query("year")) || new Date().getFullYear();
+    const term = Number(c.req.query("term")) || 1;
+    const search = c.req.query("search")?.trim();
+    const onlyIncomplete = c.req.query("incomplete") === "true";
+    const onlyFail = c.req.query("fail") === "true";
+
+    if (!subjectId) return c.json({ message: "subjectIdは必須です" }, 400);
+
+    const owns = await assertOwnsSubject(user.id, subjectId, year);
+    if (!owns) return c.json({ message: "担当外の科目です" }, 403);
+
+    const [subj] = await db
+      .select()
+      .from(subject)
+      .where(eq(subject.id, subjectId));
+    if (!subj) return c.json({ message: "科目が見つかりません" }, 404);
+
+    const [w] = await db
+      .select()
+      .from(weight)
+      .where(
+        and(
+          eq(weight.subjectId, subjectId),
+          eq(weight.year, year),
+          eq(weight.term, term),
+        ),
+      );
+
+    const enrolled = await db
+      .select({
+        id: student.id,
+        name: student.name,
+        studentNumber: student.studentNumber,
+        majorName: major.name,
+        enrollmentYear: student.enrollmentYear,
+      })
+      .from(studentSubject)
+      .innerJoin(student, eq(studentSubject.studentId, student.id))
+      .innerJoin(major, eq(student.majorId, major.id))
+      .where(
+        and(
+          eq(studentSubject.subjectId, subjectId),
+          eq(studentSubject.year, year),
+        ),
+      );
+
+    const gradeRows = await db
+      .select()
+      .from(grade)
+      .where(
+        and(
+          eq(grade.subjectId, subjectId),
+          eq(grade.year, year),
+          eq(grade.term, term),
+        ),
+      );
+    const gradeByStudent = new Map(gradeRows.map((g) => [g.studentId, g]));
+
+    let students = enrolled.map((s) => {
+      const g = gradeByStudent.get(s.id);
+      return {
+        id: s.id,
+        name: s.name,
+        studentNumber: s.studentNumber,
+        majorName: s.majorName,
+        gradeLevel: computeGradeLevel(s.enrollmentYear, year),
+        gradeId: g?.id ?? null,
+        attendanceRate: g?.attendanceRate ?? null,
+        attitudeClass: g?.attitudeClass ?? null,
+        homeworkEvaluation: g?.homeworkEvaluation ?? null,
+        finalRank: g?.finalRank ?? null,
+        isIncomplete: g ? g.isIncomplete : true,
+      };
+    });
+
+    if (search) {
+      students = students.filter(
+        (s) => s.name.includes(search) || s.studentNumber.includes(search),
+      );
+    }
+    if (onlyIncomplete) students = students.filter((s) => s.isIncomplete);
+    if (onlyFail) students = students.filter((s) => s.finalRank === "fail");
+
+    return c.json({ subjectName: subj.name, weight: w ?? null, students });
+  },
+);
+
+/* GET /grades/my-history: 講師ホーム「過去の成績一覧」用、担当科目全体の 生徒×科目 成績ピボット */
+grades.get(
+  "/my-history",
+  requireAuth({ allowedRoles: ["teacher"] }),
+  async (c) => {
+    const user = c.get("user");
+    const year = Number(c.req.query("year")) || new Date().getFullYear();
+    const term = Number(c.req.query("term")) || 1;
+    const gradeLevel = c.req.query("gradeLevel")
+      ? Number(c.req.query("gradeLevel"))
+      : null;
+    const onlyFail = c.req.query("fail") === "true";
+    const search = c.req.query("search")?.trim();
+
+    const pairs = await getOwnedSubjectYearPairs(user.id);
+    const mySubjectIds = [
+      ...new Set(pairs.filter((p) => p.year === year).map((p) => p.subjectId)),
+    ];
+    if (mySubjectIds.length === 0) {
+      return c.json({ subjects: [], students: [] });
+    }
+
+    const subjectRows = await db
+      .select({ id: subject.id, name: subject.name })
+      .from(subject)
+      .where(inArray(subject.id, mySubjectIds));
+
+    const enrolled = await db
+      .selectDistinct({
+        id: student.id,
+        name: student.name,
+        studentNumber: student.studentNumber,
+        enrollmentYear: student.enrollmentYear,
+      })
+      .from(studentSubject)
+      .innerJoin(student, eq(studentSubject.studentId, student.id))
+      .where(
+        and(
+          inArray(studentSubject.subjectId, mySubjectIds),
+          eq(studentSubject.year, year),
+        ),
+      );
+
+    const gradeRows = await db
+      .select()
+      .from(grade)
+      .where(
+        and(
+          inArray(grade.subjectId, mySubjectIds),
+          eq(grade.year, year),
+          eq(grade.term, term),
+        ),
+      );
+    const gradeByKey = new Map(
+      gradeRows.map((g) => [`${g.studentId}:${g.subjectId}`, g]),
+    );
+
+    type Cell = {
+      gradeId: number;
+      finalRank: string | null;
+      isIncomplete: boolean;
+    } | null;
+
+    let students = enrolled.map((s) => {
+      const cells: Record<number, Cell> = {};
+      for (const subj of subjectRows) {
+        const g = gradeByKey.get(`${s.id}:${subj.id}`);
+        cells[subj.id] = g
+          ? { gradeId: g.id, finalRank: g.finalRank, isIncomplete: g.isIncomplete }
+          : null;
+      }
+      return {
+        id: s.id,
+        name: s.name,
+        studentNumber: s.studentNumber,
+        gradeLevel: computeGradeLevel(s.enrollmentYear, year),
+        grades: cells,
+      };
+    });
+
+    if (gradeLevel !== null) {
+      students = students.filter((s) => s.gradeLevel === gradeLevel);
+    }
+    if (search) {
+      students = students.filter(
+        (s) => s.name.includes(search) || s.studentNumber.includes(search),
+      );
+    }
+    if (onlyFail) {
+      students = students.filter((s) =>
+        Object.values(s.grades).some((cell) => cell?.finalRank === "fail"),
+      );
+    }
+
+    return c.json({ subjects: subjectRows, students });
+  },
+);
 
 /* GET /grades/validate: 未入力 or 不可(59以下)の成績を一覧（専任教員向け） */
 grades.get(
