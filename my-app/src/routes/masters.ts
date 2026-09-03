@@ -168,13 +168,19 @@ masters.post(
     const { csv } = await c.req.json<{ csv?: string }>();
     if (!csv) return c.json({ message: "csvは必須です" }, 400);
 
-    const rows = parseCsv(csv);
+    // 学籍番号/氏名/氏名（ひらがな）は英語ヘッダー・日本語ヘッダーどちらでも受け付ける
+    const rows = parseCsv(csv).map((r) => ({
+      ...r,
+      studentNumber: r.studentNumber || r["学籍番号"] || "",
+      name: r.name || r["氏名"] || "",
+      readingName: r.readingName || r["氏名（ひらがな）"] || "",
+    }));
+
     const errors = validateRequiredFields(rows, [
       "studentNumber",
       "name",
       "readingName",
       "専攻",
-      "enrollmentYear",
     ]);
     const typeErrors = validateFieldTypes(rows, {
       enrollmentYear: "integer",
@@ -195,12 +201,13 @@ masters.post(
     if (majorErrors.length > 0)
       return c.json({ message: "取り込み失敗", errors: majorErrors }, 422);
 
+    const currentYear = new Date().getFullYear();
     const values = rows.map((r) => ({
       studentNumber: r.studentNumber,
       name: r.name,
       readingName: r.readingName,
       majorId: majorIdsByName.get(r["専攻"])![0],
-      enrollmentYear: Number(r.enrollmentYear),
+      enrollmentYear: r.enrollmentYear ? Number(r.enrollmentYear) : currentYear,
       status:
         (r.status as (typeof student.$inferInsert)["status"]) || "enrolled",
     }));
